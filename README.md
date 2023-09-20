@@ -6,7 +6,7 @@ strace-perfetto runs strace and converts the raw output to a [Trace Event](https
 
 ### Install
 ```
-go install github.com/lbirchler/strace-perfetto@latest
+go install github.com/replit/strace-perfetto@latest
 ```
 
 ### Usage
