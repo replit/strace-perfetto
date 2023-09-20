@@ -100,6 +100,8 @@ func main() {
 		case e.Cat == "detached":
 			k := strconv.Itoa(e.Pid) + e.Name
 			p := preserved[k]
+			e.Dur = e.Ts - p.Ts
+			e.Ts = p.Ts
 			e.Args.First = p.Args.First
 			syscallEvents = append(syscallEvents, e)
 			delete(preserved, k)
@@ -183,6 +185,23 @@ func main() {
 			}
 			processNames[e.Pid] = processName
 			threadNames[e.Tid] = processName
+		}
+		if e.Name == "write" {
+			m := regexpGlobalEvent.FindStringSubmatch(e.Args.First)
+			if len(m) == 2 {
+				metadataEvents = append(
+					metadataEvents,
+					&Event{
+						Name:  strings.TrimSpace(m[1]),
+						Cat:   "event",
+						Ph:    "i",
+						Pid:   e.Pid,
+						Tid:   e.Tid,
+						Scope: "g",
+						Ts:    e.Ts,
+					},
+				)
+			}
 		}
 		if e.Name == "fork" || strings.HasPrefix(e.Name, "clone") {
 			childTid, err := strconv.Atoi(e.Args.ReturnValue)

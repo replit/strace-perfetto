@@ -10,21 +10,23 @@ import (
 )
 
 var (
-	reSuccessful = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (.+) +<(.+)>`          // pid,ts,syscall,args,returnValue,duration
-	reFailed     = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (\-.+) +<(.+)>`        // pid,ts,syscall,args,returnValue,duration
-	reUnfinished = `^(\d+) +(\d+\.\d+) +(\w+)+(.+)<unfinished ...>`                        // pid,ts,syscall,args
-	reDetached   = `^(\d+) +(\d+\.\d+) <... +(\w+) resumed>+((?:.|.+\))) +\= (.+) +<(.+)>` // pid,ts,syscall,args,returnValue,duration
-	reExited     = `^(\d+) +(\d+\.\d+) +(\+\+\+\s+(.*)\s+\+\+\+)`                          // pid,ts,exit status
-	reExecve     = `^\(\"([^"]+)\", \[\"([^"]+)\"(\.\.\.)?.*`                              // executable name
-	rePrctl      = `^\(PR_SET_NAME, \"([^"]+)\"`                                           // thread name
+	reSuccessful  = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (.+) +<(.+)>`          // pid,ts,syscall,args,returnValue,duration
+	reFailed      = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (\-.+) +<(.+)>`        // pid,ts,syscall,args,returnValue,duration
+	reUnfinished  = `^(\d+) +(\d+\.\d+) +(\w+)+(.+)<unfinished ...>`                        // pid,ts,syscall,args
+	reDetached    = `^(\d+) +(\d+\.\d+) <... +(\w+) resumed>+((?:.|.+\))) +\= (.+) +<(.+)>` // pid,ts,syscall,args,returnValue,duration
+	reExited      = `^(\d+) +(\d+\.\d+) +(\+\+\+\s+(.*)\s+\+\+\+)`                          // pid,ts,exit status
+	reExecve      = `^\(\"([^"]+)\", \[\"([^"]+)\"(\.\.\.)?.*`                              // executable name
+	rePrctl       = `^\(PR_SET_NAME, \"([^"]+)\"`                                           // thread name
+	reGlobalEvent = `^\(\d+, \"(?:XXX:|!!)([^"]+)\"`                                        // event name
 
-	regexpSuccessful = regexp.MustCompile(reSuccessful)
-	regexpFailed     = regexp.MustCompile(reFailed)
-	regexpUnfinished = regexp.MustCompile(reUnfinished)
-	regexpDetached   = regexp.MustCompile(reDetached)
-	regexpExited     = regexp.MustCompile(reExited)
-	regexpExecve     = regexp.MustCompile(reExecve)
-	regexpPrctl      = regexp.MustCompile(rePrctl)
+	regexpSuccessful  = regexp.MustCompile(reSuccessful)
+	regexpFailed      = regexp.MustCompile(reFailed)
+	regexpUnfinished  = regexp.MustCompile(reUnfinished)
+	regexpDetached    = regexp.MustCompile(reDetached)
+	regexpExited      = regexp.MustCompile(reExited)
+	regexpExecve      = regexp.MustCompile(reExecve)
+	regexpPrctl       = regexp.MustCompile(rePrctl)
+	regexpGlobalEvent = regexp.MustCompile(reGlobalEvent)
 )
 
 type Event struct {
@@ -37,7 +39,8 @@ type Event struct {
 	Ts        int    `json:"ts"`
 	Dur       int    `json:"dur,omitempty"`
 	Id        uint64 `json:"id,omitempty"`
-	Args      Args   `json:"args"`
+	Scope     string `json:"s,omitempty"`
+	Args      Args   `json:"args,omitempty"`
 }
 
 type Args struct {
