@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,7 @@ func (s Strace) Run() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Run(); errors.Is(err, context.Canceled) {
 		fmt.Printf("[!] Strace timeout reached: %s\n", err)
 	}
 }

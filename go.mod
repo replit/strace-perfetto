@@ -1,3 +1,3 @@
-module github.com/lbirchler/strace-perfetto
+module github.com/replit/strace-perfetto
 
-go 1.17
+go 1.18

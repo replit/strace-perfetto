@@ -10,15 +10,21 @@ import (
 )
 
 var (
-	reSuccessful = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (\d+) +<(.+)>`         // pid,ts,syscall,args,returnValue,duration
+	reSuccessful = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (.+) +<(.+)>`          // pid,ts,syscall,args,returnValue,duration
 	reFailed     = `^(\d+) +(\d+\.\d+) +(\w+)+((?:\(\)|\(.+\))) +\= (\-.+) +<(.+)>`        // pid,ts,syscall,args,returnValue,duration
 	reUnfinished = `^(\d+) +(\d+\.\d+) +(\w+)+(.+)<unfinished ...>`                        // pid,ts,syscall,args
 	reDetached   = `^(\d+) +(\d+\.\d+) <... +(\w+) resumed>+((?:.|.+\))) +\= (.+) +<(.+)>` // pid,ts,syscall,args,returnValue,duration
+	reExited     = `^(\d+) +(\d+\.\d+) +(\+\+\+\s+(.*)\s+\+\+\+)`                          // pid,ts,exit status
+	reExecve     = `^\(\"([^"]+)\", \[\"([^"]+)\"(\.\.\.)?.*`                              // executable name
+	rePrctl      = `^\(PR_SET_NAME, \"([^"]+)\"`                                           // thread name
 
 	regexpSuccessful = regexp.MustCompile(reSuccessful)
 	regexpFailed     = regexp.MustCompile(reFailed)
 	regexpUnfinished = regexp.MustCompile(reUnfinished)
 	regexpDetached   = regexp.MustCompile(reDetached)
+	regexpExited     = regexp.MustCompile(reExited)
+	regexpExecve     = regexp.MustCompile(reExecve)
+	regexpPrctl      = regexp.MustCompile(rePrctl)
 )
 
 type Event struct {
@@ -30,14 +36,19 @@ type Event struct {
 	Tid       int    `json:"tid"`
 	Ts        int    `json:"ts"`
 	Dur       int    `json:"dur,omitempty"`
+	Id        uint64 `json:"id,omitempty"`
 	Args      Args   `json:"args"`
 }
 
 type Args struct {
-	First       string `json:"first"`
-	Second      string `json:"second,omitempty"`
-	ReturnValue string `json:"returnValue,omitempty"`
-	DetachedDur int    `json:"detachedDur,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
+	Name        string         `json:"name,omitempty"`
+	CPU         float64        `json:"cpu,omitempty"`
+	Memory      uint64         `json:"memory,omitempty"`
+	First       string         `json:"first,omitempty"`
+	Second      string         `json:"second,omitempty"`
+	ReturnValue string         `json:"returnValue,omitempty"`
+	DetachedDur int            `json:"detachedDur,omitempty"`
 }
 
 func NewEvent(content string) *Event {
@@ -48,14 +59,16 @@ func NewEvent(content string) *Event {
 }
 
 func (e *Event) getType() {
-	if m, _ := regexp.MatchString(reSuccessful, e.fullTrace); m {
-		e.Cat = "successful"
-	} else if m, _ := regexp.MatchString(reFailed, e.fullTrace); m {
+	if regexpFailed.MatchString(e.fullTrace) {
 		e.Cat = "failed"
-	} else if m, _ := regexp.MatchString(reUnfinished, e.fullTrace); m {
+	} else if regexpSuccessful.MatchString(e.fullTrace) {
+		e.Cat = "successful"
+	} else if regexpUnfinished.MatchString(e.fullTrace) {
 		e.Cat = "unfinished"
-	} else if m, _ := regexp.MatchString(reDetached, e.fullTrace); m {
+	} else if regexpDetached.MatchString(e.fullTrace) {
 		e.Cat = "detached"
+	} else if regexpExited.MatchString(e.fullTrace) {
+		e.Cat = "lifetime"
 	} else {
 		e.Cat = "other"
 	}
@@ -83,6 +96,9 @@ func (e *Event) addFields() {
 		case "unfinished":
 			e.Args.First = groups[4]
 			e.Ph = "B"
+		case "lifetime":
+			e.Name = "lifetime"
+			e.Ph = "E"
 		}
 	}
 }
@@ -97,6 +113,8 @@ func (e Event) getReGroups() []string {
 		return regexpUnfinished.FindAllStringSubmatch(e.fullTrace, -1)[0]
 	case "detached":
 		return regexpDetached.FindAllStringSubmatch(e.fullTrace, -1)[0]
+	case "lifetime":
+		return regexpExited.FindAllStringSubmatch(e.fullTrace, -1)[0]
 	}
 	return []string{}
 }
@@ -125,10 +143,51 @@ func convertID(id string) int {
 
 func convertTS(ts string) int {
 	s := strings.Split(ts, ".")
+	if len(s) == 1 {
+		return 0
+	}
 	c := s[0] + s[1]
 	i, err := strconv.Atoi(c)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return i
+}
+
+func merge(events ...[]*Event) []*Event {
+	if len(events) == 0 {
+		return nil
+	}
+	l := 0
+	{
+		i := 0
+		for i < len(events) {
+			if len(events[i]) == 0 {
+				// If this event list is empty, skip it.
+				events = append(events[:i], events[i+1:]...)
+				continue
+			}
+			l += len(events[i])
+			i++
+		}
+	}
+	merged := make([]*Event, 0, l)
+	for len(events) > 0 {
+		eventIndex := 0
+		firstEvent := events[eventIndex][0]
+		for i, e := range events[1:] {
+			if firstEvent.Ts <= e[0].Ts {
+				continue
+			}
+			eventIndex = i + 1
+			firstEvent = e[0]
+		}
+		merged = append(merged, events[eventIndex][0])
+		if len(events[eventIndex]) == 1 {
+			events = append(events[:eventIndex], events[eventIndex+1:]...)
+		} else {
+			events[eventIndex] = events[eventIndex][1:]
+		}
+	}
+	return merged
 }
