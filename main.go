@@ -56,7 +56,7 @@ func main() {
 
 	resourceMonitor, err := NewResourceMonitor()
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("cpu / memory will not be available: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	strace := Strace{
@@ -64,7 +64,9 @@ func main() {
 		UserArgs:    userStraceArgs,
 		Timeout:     *flagTimeout,
 	}
-	go resourceMonitor.Run(ctx)
+	if resourceMonitor != nil {
+		go resourceMonitor.Run(ctx)
+	}
 	strace.Run()
 	cancel()
 
@@ -73,7 +75,10 @@ func main() {
 	preserved := make(map[string]*Event) // [pid+syscall]*Event
 	scanner := bufio.NewScanner(tmp)
 
-	resourceMonitorEvents := resourceMonitor.Events()
+	var resourceMonitorEvents []*Event
+	if resourceMonitor != nil {
+		resourceMonitorEvents = resourceMonitor.Events()
+	}
 
 	liveThreads := make(map[int]bool)
 	for scanner.Scan() {

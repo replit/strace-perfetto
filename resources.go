@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -50,7 +49,7 @@ func NewResourceMonitor() (*ResourceMonitor, error) {
 		break
 	}
 	if cgroupPath == "" {
-		return nil, errors.New("could not find cgroup path")
+		return nil, fmt.Errorf("could not find cgroup path from /proc/self/cgroup: %q", string(cgroupBytes))
 	}
 	cpuMaxBytes, err := os.ReadFile(path.Join(cgroupPath, "cpu.max"))
 	if err != nil {
