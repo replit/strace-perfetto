@@ -10,12 +10,13 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
 	flagSyscalls = flag.String("e", "", "only trace specified syscalls")
 	flagOutput   = flag.String("o", "stracefile.json", "json output file")
-	flagTimeout  = flag.Int64("t", 10, "strace timeout (secs)")
+	flagTimeout  = flag.Duration("t", time.Duration(0), "strace timeout")
 )
 
 var (

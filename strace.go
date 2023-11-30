@@ -12,14 +12,18 @@ import (
 type Strace struct {
 	DefaultArgs []string
 	UserArgs    []string
-	Timeout     int64
+	Timeout     time.Duration
 }
 
 func (s Strace) Run() {
 	args := append(s.DefaultArgs, s.UserArgs...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.Timeout)*time.Second)
-	defer cancel()
+	ctx := context.Background()
+	if s.Timeout != time.Duration(0) {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(context.Background(), s.Timeout)
+		defer cancel()
+	}
 
 	cmd := exec.CommandContext(ctx, "strace", args...)
 	cmd.Stdout = os.Stdout
