@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"strconv"
 	"strings"
@@ -37,6 +38,12 @@ func main() {
 
 	if len(flag.Args()) == 0 {
 		flag.Usage()
+		os.Exit(1)
+	}
+
+	_, err := exec.LookPath("strace")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "The strace binary was not found! Please make sure it exists in your PATH: %v\n", err)
 		os.Exit(1)
 	}
 
