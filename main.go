@@ -15,9 +15,11 @@ import (
 )
 
 var (
-	flagSyscalls = flag.String("e", "", "only trace specified syscalls")
-	flagOutput   = flag.String("o", "stracefile.json", "json output file")
-	flagTimeout  = flag.Duration("t", time.Duration(0), "strace timeout")
+	flagSyscalls   = flag.String("e", "", "only trace specified syscalls")
+	flagInput      = flag.String("i", "", "result of strace -f -T -ttt -q -o strace.txt ...")
+	flagStracePath = flag.String("s", "", "absolute path to strace binary")
+	flagOutput     = flag.String("o", "stracefile.json", "json output file")
+	flagTimeout    = flag.Duration("t", time.Duration(0), "strace timeout")
 )
 
 var (
@@ -36,52 +38,68 @@ func main() {
 
 	flag.Parse()
 
-	if len(flag.Args()) == 0 {
-		flag.Usage()
-		os.Exit(1)
-	}
+	var straceFile *os.File
+	var resourceMonitor *ResourceMonitor
+	if *flagInput == "" {
+		if len(flag.Args()) == 0 {
+			flag.Usage()
+			os.Exit(1)
+		}
 
-	_, err := exec.LookPath("strace")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "The strace binary was not found! Please make sure it exists in your PATH: %v\n", err)
-		os.Exit(1)
-	}
+		if *flagStracePath == "" {
+			var err error
+			*flagStracePath, err = exec.LookPath("strace")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "The strace binary was not found! Please make sure it exists in your PATH, or specify it with `-s`: %v\n", err)
+				os.Exit(1)
+			}
+		}
 
-	// run strace
-	userStraceArgs := []string{}
-	if *flagSyscalls != "" {
-		userStraceArgs = append(userStraceArgs, "-e", *flagSyscalls)
-	}
-	userStraceArgs = append(userStraceArgs, flag.Args()...)
+		// run strace
+		userStraceArgs := []string{}
+		if *flagSyscalls != "" {
+			userStraceArgs = append(userStraceArgs, "-e", *flagSyscalls)
+		}
+		userStraceArgs = append(userStraceArgs, flag.Args()...)
 
-	tmp, err := os.CreateTemp("", "stracefile")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.Remove(tmp.Name())
+		tmp, err := os.CreateTemp("", "stracefile")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer os.Remove(tmp.Name())
+		straceFile = tmp
 
-	defaultStraceArgs = append(defaultStraceArgs, "-o", tmp.Name())
+		defaultStraceArgs = append(defaultStraceArgs, "-o", tmp.Name())
 
-	resourceMonitor, err := NewResourceMonitor()
-	if err != nil {
-		log.Printf("cpu / memory will not be available: %v", err)
+		resourceMonitor, err := NewResourceMonitor()
+		if err != nil {
+			log.Printf("cpu / memory will not be available: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		strace := Strace{
+			DefaultArgs: defaultStraceArgs,
+			UserArgs:    userStraceArgs,
+			Timeout:     *flagTimeout,
+			StracePath:  *flagStracePath,
+		}
+		if resourceMonitor != nil {
+			go resourceMonitor.Run(ctx)
+		}
+		strace.Run()
+		cancel()
+	} else {
+		var err error
+		straceFile, err = os.Open(*flagInput)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer straceFile.Close()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	strace := Strace{
-		DefaultArgs: defaultStraceArgs,
-		UserArgs:    userStraceArgs,
-		Timeout:     *flagTimeout,
-	}
-	if resourceMonitor != nil {
-		go resourceMonitor.Run(ctx)
-	}
-	strace.Run()
-	cancel()
 
 	// parse results
 	var syscallEvents []*Event
 	preserved := make(map[string]*Event) // [pid+syscall]*Event
-	scanner := bufio.NewScanner(tmp)
+	scanner := bufio.NewScanner(straceFile)
 
 	var resourceMonitorEvents []*Event
 	if resourceMonitor != nil {

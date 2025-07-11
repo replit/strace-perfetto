@@ -13,6 +13,7 @@ type Strace struct {
 	DefaultArgs []string
 	UserArgs    []string
 	Timeout     time.Duration
+	StracePath  string
 }
 
 func (s Strace) Run() {
@@ -25,7 +26,7 @@ func (s Strace) Run() {
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(ctx, "strace", args...)
+	cmd := exec.CommandContext(ctx, s.StracePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
